@@ -34,7 +34,7 @@ from librosa.filters import mel as librosa_mel_fn
 class TacotronSTFT(torch.nn.Module):
     def __init__(self, filter_length=1024, hop_length=256, win_length=1024,
                  n_mel_channels=80, sampling_rate=22050, mel_fmin=0.0,
-                 mel_fmax=None, center=False, device='cpu'):
+                 mel_fmax=None, center=False, return_complex=False, device='cpu'):
         super(TacotronSTFT, self).__init__()
         self.n_mel_channels = n_mel_channels
         self.sampling_rate = sampling_rate
@@ -44,6 +44,7 @@ class TacotronSTFT(torch.nn.Module):
         self.fmin = mel_fmin
         self.fmax = mel_fmax
         self.center = center
+        self.return_complex = return_complex
 
         mel = librosa_mel_fn(
             sampling_rate, filter_length, n_mel_channels, mel_fmin, mel_fmax)
@@ -59,11 +60,20 @@ class TacotronSTFT(torch.nn.Module):
         assert (torch.max(y.data) <= 1)
 
         y = torch.nn.functional.pad(y.unsqueeze(1),
-                                    (int((self.n_fft - self.hop_size) / 2), int((self.n_fft - self.hop_size) / 2)),
+                                    (int((self.n_fft - self.hop_size) / 2),
+                                    int((self.n_fft - self.hop_size) / 2)),
                                     mode='reflect')
         y = y.squeeze(1)
-        spec = torch.stft(y, self.n_fft, hop_length=self.hop_size, win_length=self.win_size, window=self.hann_window,
-                          center=self.center, pad_mode='reflect', normalized=False, onesided=True)
+        spec = torch.stft(y,
+                          self.n_fft,
+                          hop_length=self.hop_size,
+                          win_length=self.win_size,
+                          window=self.hann_window,
+                          center=self.center,
+                          pad_mode='reflect',
+                          normalized=False,
+                          onesided=True,
+                          return_complex=self.return_complex)
         spec = torch.norm(spec, p=2, dim=-1)
 
         return spec
@@ -82,15 +92,21 @@ class TacotronSTFT(torch.nn.Module):
         assert(torch.max(y.data) <= 1)
 
         y = torch.nn.functional.pad(y.unsqueeze(1),
-                                    (int((self.n_fft - self.hop_size) / 2), int((self.n_fft - self.hop_size) / 2)),
+                                    (int((self.n_fft - self.hop_size) / 2),
+                                    int((self.n_fft - self.hop_size) / 2)),
                                     mode='reflect')
         y = y.squeeze(1)
-
-        spec = torch.stft(y, self.n_fft, hop_length=self.hop_size, win_length=self.win_size, window=self.hann_window,
-                          center=self.center, pad_mode='reflect', normalized=False, onesided=True)
-
+        spec = torch.stft(y,
+                          self.n_fft,
+                          hop_length=self.hop_size,
+                          win_length=self.win_size,
+                          window=self.hann_window,
+                          center=self.center,
+                          pad_mode='reflect',
+                          normalized=False,
+                          onesided=True,
+                          return_complex=self.return_complex)
         spec = torch.sqrt(spec.pow(2).sum(-1) + (1e-9))
-
         spec = torch.matmul(self.mel_basis, spec)
         spec = self.spectral_normalize_torch(spec)
 

@@ -67,7 +67,7 @@ class MelFromDisk(Dataset):
 
     def my_getitem(self, idx):
         wavpath, _, _ = self.meta[idx]
-        wavpath = os.path.join(self.data_dir, wavpath)
+        wavpath = os.path.join(self.data_dir, 'audio', wavpath+'.wav')
         sr, audio = read_wav_np(wavpath)
 
         if len(audio) < self.hp.audio.segment_length + self.hp.audio.pad_short:
