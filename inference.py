@@ -8,6 +8,29 @@ from omegaconf import OmegaConf
 
 from model.generator import Generator
 
+from utils.utils import read_wav_np
+from utils.stft import TacotronSTFT
+
+def get_mel(hp, wavpath):
+    sr, wav = read_wav_np(wavpath)
+    assert sr == hp.audio.sampling_rate, \
+        'sample mismatch: expected %d, got %d at %s' % (hp.audio.sampling_rate, sr, wavpath)
+
+    wav = torch.from_numpy(wav).unsqueeze(0)
+
+    stft = TacotronSTFT(hp.audio.filter_length,
+                        hp.audio.hop_length,
+                        hp.audio.win_length,
+                        hp.audio.n_mel_channels,
+                        hp.audio.sampling_rate,
+                        hp.audio.mel_fmin,
+                        hp.audio.mel_fmax,
+                        center=False)
+
+    mel = stft.mel_spectrogram(wav)
+
+    return mel
+
 
 def main(args):
     checkpoint = torch.load(args.checkpoint_path)
@@ -28,9 +51,12 @@ def main(args):
     model.load_state_dict(new_state_dict)
     model.eval(inference=True)
 
+    os.makedirs(args.output_folder, exist_ok=True)
     with torch.no_grad():
-        for melpath in tqdm.tqdm(glob.glob(os.path.join(args.input_folder, '*.mel'))):
-            mel = torch.load(melpath)
+        for wavpath in tqdm.tqdm(glob.glob(os.path.join(args.input_folder, '*.wav'))):
+
+            mel = get_mel(hp, wavpath)
+
             if len(mel.shape) == 2:
                 mel = mel.unsqueeze(0)
             mel = mel.cuda()
@@ -38,12 +64,8 @@ def main(args):
             audio = model.inference(mel)
             audio = audio.cpu().detach().numpy()
 
-            if args.output_folder is None:  # if output folder is not defined, audio samples are saved in input folder
-                out_path = melpath.replace('.mel', '_reconstructed_epoch%04d.wav' % checkpoint['epoch'])
-            else:
-                basename = os.path.basename(melpath)
-                basename = basename.replace('.mel', '_reconstructed_epoch%04d.wav' % checkpoint['epoch'])
-                out_path = os.path.join(args.output_folder, basename)
+            basename = os.path.basename(wavpath)
+            out_path = os.path.join(args.output_folder, basename)
             write(out_path, hp.audio.sampling_rate, audio)
 
 
